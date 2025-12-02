@@ -1,0 +1,172 @@
+{
+  "version": "1.0.0",
+  "bot": {
+    "name": "Government Scheme Assistant",
+    "description": "A WhatsApp bot to provide Central & Haryana Government Scheme details",
+    "languages": ["en", "hi"]
+  },
+  "rootFlow": "welcome",
+  "flows": [
+    {
+      "name": "welcome",
+      "nodes": [
+        {
+          "id": "welcome_message",
+          "type": "standard",
+          "next": [],
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "नमस्ते! 👋\nWelcome to the Government Scheme Assistant.\n\nकृपया अपनी भाषा चुनें ⬇️\nPlease choose your language:"
+            },
+            {
+              "type": "buttons",
+              "buttons": [
+                { "title": "हिंदी", "payload": "LANG_HI" },
+                { "title": "English", "payload": "LANG_EN" }
+              ]
+            }
+          ]
+        }
+      ],
+      "links": [
+        {
+          "source": "welcome_message",
+          "target": "hindi_user_details",
+          "condition": "event.payload == \"LANG_HI\""
+        },
+        {
+          "source": "welcome_message",
+          "target": "english_user_details",
+          "condition": "event.payload == \"LANG_EN\""
+        }
+      ]
+    },
+    {
+      "name": "user_details",
+      "nodes": [
+        {
+          "id": "hindi_user_details",
+          "type": "collect",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "कृपया सही सरकारी योजना सुझाने के लिए अपनी जानकारी भरें:\n\n1️⃣ आपकी आयु?\n2️⃣ आपकी जाति? (General / OBC / SC / ST)\n3️⃣ आपका व्यवसाय?\n4️⃣ आपकी शिक्षा?"
+            }
+          ],
+          "properties": {
+            "fields": ["user.age", "user.category", "user.occupation", "user.education"]
+          },
+          "next": [
+            { "condition": "true", "node": "main_menu_hindi" }
+          ]
+        },
+        {
+          "id": "english_user_details",
+          "type": "collect",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "Please share your details:\n\n1️⃣ Your age\n2️⃣ Your category (General / OBC / SC / ST)\n3️⃣ Your occupation\n4️⃣ Your education level"
+            }
+          ],
+          "properties": {
+            "fields": ["user.age", "user.category", "user.occupation", "user.education"]
+          },
+          "next": [
+            { "condition": "true", "node": "main_menu_english" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "menus",
+      "nodes": [
+        {
+          "id": "main_menu_hindi",
+          "type": "standard",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "कृपया योजना का प्रकार चुनें:\n\n1️⃣ केंद्रीय सरकारी योजनाएँ\n2️⃣ हरियाणा सरकारी योजनाएँ\n3️⃣ छात्रवृत्ति योजनाएँ\n4️⃣ किसान योजनाएँ\n5️⃣ महिला योजनाएँ\n6️⃣ लोन व वित्तीय सहायता\n7️⃣ पेंशन / वृद्धावस्था योजनाएँ\n8️⃣ सब्सिडी योजनाएँ\n9️⃣ रोजगार / स्किल योजनाएँ\n🔟 आपकी Eligibility रिपोर्ट"
+            },
+            {
+              "type": "buttons",
+              "buttons": [
+                { "title": "केंद्रीय योजनाएँ", "payload": "CENTRAL" },
+                { "title": "हरियाणा योजनाएँ", "payload": "HARYANA" },
+                { "title": "Eligibility", "payload": "ELIG" }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "main_menu_english",
+          "type": "standard",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "Please select scheme category:\n\n1️⃣ Central Government Schemes\n2️⃣ Haryana State Government Schemes\n3️⃣ Scholarship Schemes\n4️⃣ Farmer Schemes\n5️⃣ Women Schemes\n6️⃣ Loan Schemes\n7️⃣ Pension Schemes\n8️⃣ Subsidy Schemes\n9️⃣ Employment Schemes\n🔟 Eligibility Report"
+            },
+            {
+              "type": "buttons",
+              "buttons": [
+                { "title": "Central Schemes", "payload": "CENTRAL" },
+                { "title": "Haryana Schemes", "payload": "HARYANA" },
+                { "title": "Eligibility", "payload": "ELIG" }
+              ]
+            }
+          ]
+        }
+      ],
+      "links": [
+        { "source": "main_menu_hindi", "target": "central_schemes", "condition": "event.payload == \"CENTRAL\"" },
+        { "source": "main_menu_hindi", "target": "haryana_schemes", "condition": "event.payload == \"HARYANA\"" },
+        { "source": "main_menu_hindi", "target": "eligibility_report", "condition": "event.payload == \"ELIG\"" },
+        { "source": "main_menu_english", "target": "central_schemes", "condition": "event.payload == \"CENTRAL\"" },
+        { "source": "main_menu_english", "target": "haryana_schemes", "condition": "event.payload == \"HARYANA\"" },
+        { "source": "main_menu_english", "target": "eligibility_report", "condition": "event.payload == \"ELIG\"" }
+      ]
+    },
+    {
+      "name": "schemes",
+      "nodes": [
+        {
+          "id": "central_schemes",
+          "type": "standard",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "केंद्रीय सरकारी योजनाएँ:\n\n1️⃣ प्रधानमंत्री आवास योजना\n2️⃣ आयुष्मान भारत\n3️⃣ पीएम किसान सम्मान निधि\n4️⃣ उज्ज्वला योजना\n5️⃣ मुद्रा लोन\n6️⃣ पीएम स्वनिधि\n7️⃣ फसल बीमा योजना\n8️⃣ अटल पेंशन योजना\n9️⃣ स्किल इंडिया\n\n🔙 मुख्य मेनू (Menu)"
+            }
+          ]
+        },
+        {
+          "id": "haryana_schemes",
+          "type": "standard",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "हरियाणा सरकार की योजनाएँ:\n\n1️⃣ परिवार पहचान पत्र (PPP)\n2️⃣ मुख्यमंत्री परिवार समृद्धि योजना\n3️⃣ हरियाणा वृद्धावस्था पेंशन\n4️⃣ किसान सम्मान निधि - हरियाणा\n5️⃣ श्रम कल्याण बोर्ड योजनाएँ\n6️⃣ मुख्यमंत्री आवास योजना\n7️⃣ गरीब परिवार आर्थिक सहायता\n8️⃣ छात्राओं के लिए स्कॉलरशिप\n9️⃣ BPL परिवार योजनाएँ\n\n🔙 मुख्य मेनू (Menu)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "eligibility",
+      "nodes": [
+        {
+          "id": "eligibility_report",
+          "type": "standard",
+          "onEnter": [
+            {
+              "type": "say",
+              "text": "आपकी Eligibility रिपोर्ट तैयार की जा रही है… ✔️\n\n🔹 आयु: {{user.age}}\n🔹 श्रेणी: {{user.category}}\n🔹 व्यवसाय: {{user.occupation}}\n🔹 शिक्षा: {{user.education}}\n🔹 राज्य: Haryana\n\nआप इन योजनाओं के लिए पात्र हैं:\n\n🎯 केंद्र:\n- PM Awas Yojana\n- Ayushman Bharat\n- Mudra Loan\n- Atal Pension Yojana\n\n🎯 हरियाणा:\n- Parivar Samridhi Yojana\n- Haryana Pension\n- PPP Benefits\n- Post Matric Scholarship Haryana\n\nPDF चाहिए तो 'PDF' लिखें।\nमुख्य मेनू के लिए 'Menu' लिखें।"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
