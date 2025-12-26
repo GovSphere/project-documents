@@ -39,7 +39,7 @@ jobs:
 
       - name: Run scheme script
         run: |
-          python new1.py
+          python scrape_govt_schemes.py
 
       - name: Upload scheme file
         uses: actions/upload-artifact@v4
