@@ -1,0 +1,45 @@
+
+name: Government Scheme List
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scheme:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      # Optional: reduce Selenium/chromedriver noise
+      WDM_LOG_LEVEL: "0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Optional: quick sanity check that Chrome exists (ubuntu-latest usually has it)
+      - name: Check Chrome
+        run: |
+          google-chrome --version || true
+          chromium-browser --version || true
+
+      - name: Run scheme script 
+        run: |
+          python haryana_scheme.py
+
+      - name: Upload scheme file
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemes_list
+          path: schemes_list.csv

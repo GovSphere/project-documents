@@ -2,8 +2,7 @@
 import time
 import random
 import csv
-from dotenv import load_dotenv
-import os
+
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -14,12 +13,20 @@ from selenium.common.exceptions import (
     TimeoutException, StaleElementReferenceException,
     ElementClickInterceptedException, ElementNotInteractableException
 )
-load_dotenv()
-URL = "https://www.myscheme.gov.in"
-START_URL = URL + "/search/state/Haryana"
 
+URL = "https://www.myscheme.gov.in"
+START_URL = URL + "/search"
+STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh","Arunachal Pradesh",
+         "Assam", "Bihar", "Chandigarh","Chhattisgarh", "Dadra & Nagar Haveli and Daman & Diu",
+        "Delhi", "Goa", "Gujarat", "Himachal Pradesh",
+        "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala",
+        "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra",
+        "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
+        "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+        "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"]
 FIRST_PAGE = 1
-LAST_PAGE = 25
+LAST_PAGE = 453  # as per your paginator
+
 # ----------------------------
 # Selenium setup
 # ----------------------------
@@ -118,7 +125,7 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
     csvwriter = csv.writer(csvfile)
     # If you prefer joined strings in CSV, set join_lists=True
     join_lists = True
-    csvwriter.writerow(["Department/Ministry", "Scheme Name", "Scheme Link",
+    csvwriter.writerow(["Department/Ministry", "Scheme Name", "Scheme Link", "Tags",
                         "Benefits", "Eligibility Criteria", "Documents Required"])
 
     dismiss_modal_best_effort()
@@ -129,6 +136,7 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
     # Iterate pages
     for page in range(FIRST_PAGE, LAST_PAGE + 1):
         if page > 1:
+            print(f"Page {page} --------------------------------")
             # paginate to requested page from current results page
             dismiss_modal_best_effort()
             old_first = first_result_el()
@@ -158,12 +166,15 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
             # Ministry/Department text near the card
             ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
             ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
-
-            print(h2_id," | ",scheme_url)
-            cards.append((ministry, scheme_name, scheme_url))
+            next_div = title_h2.find_parent("div")  # outer flex-col div
+            tags = [span.get_text(strip=True) for span in next_div.find_next("div").find_all("span")]
+            if ministry in STATES:
+                continue
+            print(ministry," | ", scheme_url, " | ", scheme_name, " | ", tags)
+            cards.append((ministry, scheme_name, scheme_url, tags))
 
         # Visit each scheme in a new tab, scrape details, close tab
-        for ministry, scheme_name, scheme_url in cards:
+        for ministry, scheme_name, scheme_url, tags in cards:
             try:
                 # open and switch
                 driver.execute_script("window.open(arguments[0], '_blank');", scheme_url)
@@ -194,6 +205,7 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
                     ministry,
                     scheme_name,
                     scheme_url,
+                    tags,
                     fmt(benefits_list),
                     fmt(eligibility_list),
                     fmt(documents_list)
