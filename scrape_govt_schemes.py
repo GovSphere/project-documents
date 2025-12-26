@@ -18,7 +18,7 @@ URL = "https://www.myscheme.gov.in"
 START_URL = URL + "/search"
 
 FIRST_PAGE = 1
-LAST_PAGE = 453  # as per your paginator
+LAST_PAGE = 10  # as per your paginator
 
 # ----------------------------
 # Selenium setup
