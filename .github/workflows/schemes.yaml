@@ -8,8 +8,6 @@ on:
 jobs:
   scheme:
     runs-on: ubuntu-latest
-    timeout-minutes: 355   # keep under GitHub's 6-hr ceiling safely
-
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
@@ -37,7 +35,7 @@ jobs:
           google-chrome --version || true
           chromium-browser --version || true
 
-      - name: Run scheme script
+      - name: Run scheme script 
         run: |
           python scrape_govt_schemes.py
 

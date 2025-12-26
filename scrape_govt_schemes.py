@@ -2,7 +2,8 @@
 import time
 import random
 import csv
-
+from dotenv import load_dotenv
+import os
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,13 +14,12 @@ from selenium.common.exceptions import (
     TimeoutException, StaleElementReferenceException,
     ElementClickInterceptedException, ElementNotInteractableException
 )
-
+load_dotenv()
 URL = "https://www.myscheme.gov.in"
-START_URL = URL + "/search"
+START_URL = URL + "/search/state/Haryana"
 
 FIRST_PAGE = 1
-LAST_PAGE = 453  # as per your paginator
-
+LAST_PAGE = 25
 # ----------------------------
 # Selenium setup
 # ----------------------------
