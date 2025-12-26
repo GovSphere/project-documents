@@ -2,6 +2,7 @@
 name: Scrape MyScheme in 10-page batches
 
 on:
+  push:
   workflow_dispatch:
     inputs:
       total_pages:
