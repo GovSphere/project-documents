@@ -18,13 +18,13 @@ URL = "https://www.myscheme.gov.in"
 START_URL = URL + "/search"
 
 FIRST_PAGE = 1
-LAST_PAGE = 10  # as per your paginator
+LAST_PAGE = 453  # as per your paginator
 
 # ----------------------------
 # Selenium setup
 # ----------------------------
 opts = Options()
-# opts.add_argument("--headless=new")
+opts.add_argument("--headless=new")
 opts.add_argument("--window-size=1920,1080")
 opts.add_argument("--disable-gpu")
 opts.add_argument("--no-sandbox")
@@ -159,7 +159,7 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
             ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
             ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
 
-            print(h2_id, "=>", ministry, scheme_url, "=>", scheme_name)
+            print(h2_id," | ",scheme_url)
             cards.append((ministry, scheme_name, scheme_url))
 
         # Visit each scheme in a new tab, scrape details, close tab
