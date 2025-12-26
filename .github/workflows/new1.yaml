@@ -56,7 +56,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: ${{ github.event.inputs.max_parallel }}
+      max-parallel: ${{ fromJSON(github.event.inputs.max_parallel) }}
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
