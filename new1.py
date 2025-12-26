@@ -1,140 +1,85 @@
 
-import csv
+# scrape.py
+import os
 import time
 import random
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import csv
+import argparse
 
-import requests
 from bs4 import BeautifulSoup
-
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
-
+from selenium.common.exceptions import (
+    TimeoutException, StaleElementReferenceException,
+    ElementClickInterceptedException, ElementNotInteractableException
+)
 
 URL = "https://www.myscheme.gov.in"
 START_URL = URL + "/search"
-FIRST_PAGE, LAST_PAGE = 1, 4
 
-# ---------- Tuning knobs ----------
-MAX_WORKERS = 16          # increase to 24 on ubuntu runners if stable
-REQ_TIMEOUT = 20
-REQ_RETRIES = 3
-POLITE_JITTER = (0.02, 0.08)  # tiny jitter per request thread to reduce burst
-# ---------------------------------
+# ----------------------------
+# CLI: allow batching via args or env
+# ----------------------------
+def get_args():
+    p = argparse.ArgumentParser(description="Scrape MyScheme search pages in batches.")
+    p.add_argument("--first-page", type=int, default=int(os.getenv("FIRST_PAGE", "1")),
+                   help="First page number to scrape (inclusive).")
+    p.add_argument("--last-page", type=int, default=int(os.getenv("LAST_PAGE", "453")),
+                   help="Last page number to scrape (inclusive).")
+    p.add_argument("--outfile", type=str, default=os.getenv("OUTFILE", "schemes_list.csv"),
+                   help="Output CSV filename.")
+    p.add_argument("--join-lists", action="store_true",
+                   help="Join list fields with ' | ' strings in CSV.")
+    return p.parse_args()
 
-
-def clean_text(s: str) -> str:
-    """Remove troublesome invisible unicode that can break console/logs."""
-    if not s:
-        return ""
-    return (s.replace("\u200d", "")
-             .replace("\u200c", "")
-             .replace("\ufeff", "")
-             .strip())
-
-
-def scheme_details_from_html(html: str, section_id: str):
-    soup = BeautifulSoup(html, "html.parser")
-    items = soup.select(f"#{section_id} ol li") + soup.select(f"#{section_id} ul li")
-    return [clean_text(li.get_text(strip=True)) for li in items]
-
-
-def fetch_scheme_detail(session: requests.Session, row):
-    """
-    row = (ministry, scheme_name, scheme_url)
-    Returns: (ministry, scheme_name, scheme_url, benefits, eligibility, documents)
-    """
-    ministry, scheme_name, scheme_url = row
-
-    for attempt in range(1, REQ_RETRIES + 1):
-        try:
-            time.sleep(random.uniform(*POLITE_JITTER))
-            r = session.get(scheme_url, timeout=REQ_TIMEOUT)
-            r.raise_for_status()
-            html = r.text
-
-            benefits = scheme_details_from_html(html, "benefits")
-            eligibility = scheme_details_from_html(html, "eligibility")
-            documents = scheme_details_from_html(html, "documents-required")
-
-            return (
-                ministry, scheme_name, scheme_url,
-                " | ".join(benefits),
-                " | ".join(eligibility),
-                " | ".join(documents)
-            )
-        except Exception:
-            if attempt == REQ_RETRIES:
-                # Return empty details if failed after retries
-                return (ministry, scheme_name, scheme_url, "", "", "")
-            time.sleep(0.6 * attempt)
-
-
-def build_driver():
+# ----------------------------
+# Selenium setup
+# ----------------------------
+def make_driver():
     opts = Options()
     opts.add_argument("--headless=new")
     opts.add_argument("--window-size=1920,1080")
     opts.add_argument("--disable-gpu")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--disable-notifications")
-    opts.add_argument("--log-level=3")
-
-    # Make page loads faster by not waiting for all assets
-    opts.page_load_strategy = "eager"
-
-    # Disable images / fonts / css for speed (Chrome preferences)
-    prefs = {
-        "profile.managed_default_content_settings.images": 2,
-        "profile.managed_default_content_settings.stylesheets": 2,
-        "profile.managed_default_content_settings.fonts": 2,
-        "profile.managed_default_content_settings.cookies": 1,
-        "profile.default_content_setting_values.notifications": 2,
-    }
-    opts.add_experimental_option("prefs", prefs)
-    opts.add_experimental_option("excludeSwitches", ["enable-logging"])
-
+    # (Optional) make headless look more “real”
+    opts.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     driver = webdriver.Chrome(options=opts)
-
-    # Block analytics & heavy third-party
-    try:
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": [
-            "https://plausible.io/*",
-            "https://www.google-analytics.com/*",
-            "https://www.googletagmanager.com/*",
-            "https://connect.facebook.net/*",
-        ]})
-    except Exception:
-        pass
-
+    driver.set_page_load_timeout(60)
     return driver
 
+def scheme_details(soup, required_details):
+    items = []
+    details = soup.select(f"#{required_details} ol li") + soup.select(f"#{required_details} ul li")
+    for li in details:
+        items.append(li.get_text(strip=True))
+    return items
 
-def dismiss_modal_best_effort(driver):
+def dismiss_modal_best_effort(driver, wait):
+    """Close any popup/modal if it appears."""
     for text in ("Ok", "OK", "Close", "I Agree", "Accept"):
         try:
-            WebDriverWait(driver, 2).until(
+            btn = WebDriverWait(driver, 2).until(
                 EC.element_to_be_clickable((By.XPATH, f"//button[normalize-space()='{text}']"))
-            ).click()
-            time.sleep(0.15)
+            )
+            btn.click()
+            time.sleep(0.3)
             return
         except Exception:
             pass
 
-
 def safe_click(driver, el):
+    """Scroll into view and click; fallback to JS click."""
     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+    time.sleep(0.15)
     try:
         el.click()
-    except Exception:
+    except (ElementClickInterceptedException, ElementNotInteractableException, StaleElementReferenceException):
         driver.execute_script("arguments[0].click();", el)
-
 
 def get_pager_ul(driver, wait):
     return wait.until(EC.presence_of_element_located((
@@ -144,127 +89,148 @@ def get_pager_ul(driver, wait):
         "contains(@class,'justify-center')]"
     )))
 
-
-def first_result_el(wait):
-    # IMPORTANT: use real selector (not &gt;)
+def first_result_el(driver, wait):
+    """An element that becomes stale when results change."""
     return wait.until(EC.presence_of_element_located(
         (By.CSS_SELECTOR, "h2[id] > a[href^='/schemes/']")
     ))
 
-
 def wait_page_change(wait, old_first):
+    """Wait until results change after pagination click."""
     try:
         wait.until(EC.staleness_of(old_first))
     except TimeoutException:
-        time.sleep(0.4)
+        time.sleep(0.8)
 
-
-def click_next_arrow(driver, wait):
+def click_page_number_if_visible(driver, wait, n: int) -> bool:
+    """Click page number <li> if visible in current pagination window."""
     ul = get_pager_ul(driver, wait)
-    # right arrow is last <li> that contains svg
-    next_li = ul.find_element(By.XPATH, ".//li[.//*[name()='svg']][last()]")
-    safe_click(driver, next_li)
+    try:
+        li = ul.find_element(By.XPATH, f".//li[normalize-space()='{n}']")
+        safe_click(driver, li)
+        return True
+    except Exception:
+        return False
 
+def click_next_arrow(driver, wait) -> bool:
+    """Click right arrow (next page)."""
+    ul = get_pager_ul(driver, wait)
+    try:
+        next_li = ul.find_element(By.XPATH, ".//li[.//*[name()='svg']][last()]")
+        safe_click(driver, next_li)
+        return True
+    except Exception:
+        return False
 
-def scrape_listing_links():
-    """
-    Selenium phase: iterate 453 pages and collect scheme listing rows
-    Returns list of tuples: (ministry, scheme_name, scheme_url)
-    """
-    driver = build_driver()
-    wait = WebDriverWait(driver, 25)
+def main():
+    args = get_args()
+    first_page = max(1, args.first_page)
+    last_page = max(first_page, args.last_page)  # ensure valid range
 
-    driver.get(START_URL)
-    dismiss_modal_best_effort(driver)
+    driver = make_driver()
+    wait = WebDriverWait(driver, 30)
 
-    # Ensure first results loaded
-    first_result_el(wait)
+    try:
+        driver.get(START_URL)
 
-    all_rows = []
-    seen_urls = set()
+        with open(args.outfile, "w", newline="", encoding="utf-8") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            join_lists = args.join_lists
+            csvwriter.writerow(["Department/Ministry", "Scheme Name", "Scheme Link",
+                                "Benefits", "Eligibility Criteria", "Documents Required"])
 
-    for page in range(FIRST_PAGE, LAST_PAGE + 1):
-        if page > 1:
-            dismiss_modal_best_effort(driver)
-            old_first = first_result_el(wait)
-            click_next_arrow(driver, wait)
-            wait_page_change(wait, old_first)
-            dismiss_modal_best_effort(driver)
-            first_result_el(wait)
+            dismiss_modal_best_effort(driver, wait)
+            first_result_el(driver, wait)  # confirm first page loaded
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+            main_window = driver.current_window_handle
 
-        for a in soup.select("h2[id] > a[href^='/schemes/']"):
-            title_h2 = a.find_parent("h2")
-            href = a.get("href", "")
-            scheme_url = URL + href
-            if scheme_url in seen_urls:
-                continue
-            seen_urls.add(scheme_url)
+            # Iterate pages
+            for page in range(first_page, last_page + 1):
+                if page > 1:
+                    # paginate to requested page from current results page
+                    dismiss_modal_best_effort(driver, wait)
+                    old_first = first_result_el(driver, wait)
 
-            scheme_name = clean_text((a.find("span") or a).get_text(strip=True))
+                    # Try fast path (direct page number if visible), else Next
+                    if not click_page_number_if_visible(driver, wait, page):
+                        if not click_next_arrow(driver, wait):
+                            raise RuntimeError("Could not find/click Next arrow in pagination.")
 
-            ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
-            ministry = clean_text(ministry_h2.get_text(strip=True) if ministry_h2 else "")
+                    wait_page_change(wait, old_first)
+                    dismiss_modal_best_effort(driver, wait)
+                    first_result_el(driver, wait)  # ensure new page loaded
 
-            all_rows.append((ministry, scheme_name, scheme_url))
+                # Parse the current search page results
+                page_html = driver.page_source
+                soup = BeautifulSoup(page_html, "html.parser")
 
-        # tiny pause only between listing pages (not per scheme)
-        time.sleep(random.uniform(0.05, 0.15))
+                # Collect cards (ministry, scheme name, URL) from the listing
+                cards = []
+                for a in soup.select("h2[id] > a[href^='/schemes/']"):
+                    title_h2 = a.find_parent("h2")
+                    href = a.get("href", "")
+                    scheme_url = URL + href
+                    scheme_name = (a.find("span") or a).get_text(strip=True)
 
-        if page % 25 == 0:
-            print(f"[Listing] Collected {len(all_rows)} scheme links upto page {page}/{LAST_PAGE}")
+                    # Ministry/Department text near the card
+                    ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
+                    ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
 
-    driver.quit()
-    return all_rows
+                    cards.append((ministry, scheme_name, scheme_url))
 
+                # Visit each scheme in a new tab, scrape details, close tab
+                for ministry, scheme_name, scheme_url in cards:
+                    try:
+                        # open and switch
+                        driver.execute_script("window.open(arguments[0], '_blank');", scheme_url)
+                        wait.until(lambda d: len(d.window_handles) > 1)
+                        new_tab = [h for h in driver.window_handles if h != main_window][-1]
+                        driver.switch_to.window(new_tab)
+                        dismiss_modal_best_effort(driver, wait)
 
-def scrape_details_fast(rows, output_csv="schemes_list.csv"):
-    """
-    Requests phase: concurrently fetch details for every scheme URL.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+                        # Wait for a reliable element on detail page
+                        try:
+                            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#benefits, #eligibility, main")))
+                        except TimeoutException:
+                            pass
 
-    with requests.Session() as session:
-        session.headers.update(headers)
+                        detail_html = driver.page_source
+                        detail_soup = BeautifulSoup(detail_html, "html.parser")
 
-        with open(output_csv, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow([
-                "Department/Ministry", "Scheme Name", "Scheme Link",
-                "Benefits", "Eligibility Criteria", "Documents Required"
-            ])
+                        eligibility_list = scheme_details(detail_soup, "eligibility")
+                        benefits_list = scheme_details(detail_soup, "benefits")
+                        documents_list = scheme_details(detail_soup, "documents-required")
 
-            futures = []
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-                for row in rows:
-                    futures.append(ex.submit(fetch_scheme_detail, session, row))
+                        def fmt(lst):
+                            return " | ".join(lst) if join_lists else lst
 
-                done = 0
-                total = len(futures)
+                        csvwriter.writerow([
+                            ministry,
+                            scheme_name,
+                            scheme_url,
+                            fmt(benefits_list),
+                            fmt(eligibility_list),
+                            fmt(documents_list)
+                        ])
 
-                for fut in as_completed(futures):
-                    result = fut.result()
-                    w.writerow(result)
-                    done += 1
-                    if done % 200 == 0:
-                        print(f"[Details] {done}/{total} done")
+                    finally:
+                        # close tab and return to main
+                        try:
+                            driver.close()
+                        except Exception:
+                            pass
+                        driver.switch_to.window(main_window)
 
-    print(f"✅ Done. Saved: {output_csv}")
+                    time.sleep(random.uniform(0.25, 0.7))
 
+                time.sleep(random.uniform(0.4, 1.0))
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+    print(f"Done. Saved: {args.outfile}")
 
 if __name__ == "__main__":
-    start = time.time()
-    rows = scrape_listing_links()
-    mid = time.time()
-
-    print(f"Collected {len(rows)} unique scheme URLs in {mid - start:.1f}s")
-
-    scrape_details_fast(rows, output_csv="schemes_list.csv")
-
-    end = time.time()
-    print(f"Total time: {(end - start)/60:.2f} minutes")
+    main()

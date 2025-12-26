@@ -1,0 +1,115 @@
+
+name: Scrape MyScheme in 10-page batches
+
+on:
+  workflow_dispatch:
+    inputs:
+      total_pages:
+        description: "Total pages to scrape"
+        type: number
+        default: 453
+      batch_size:
+        description: "Pages per job"
+        type: number
+        default: 10
+      max_parallel:
+        description: "Max concurrent jobs (use 1 for sequential)"
+        type: number
+        default: 1
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.make.outputs.matrix }}
+    steps:
+      - name: Create matrix JSON
+        id: make
+        shell: bash
+        run: |
+          TOTAL=${{ github.event.inputs.total_pages }}
+          BATCH=${{ github.event.inputs.batch_size }}
+
+          # Build JSON array of objects: [{"start":1,"end":10},{"start":11,"end":20}, ...]
+          ranges=()
+          start=1
+          while [ $start -le $TOTAL ]; do
+            end=$(( start + BATCH - 1 ))
+            if [ $end -gt $TOTAL ]; then end=$TOTAL; fi
+            ranges+=( "{\"start\":$start,\"end\":$end}" )
+            start=$(( end + 1 ))
+          done
+
+          json="[${ranges[*]}]"
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix: $json"
+
+  scrape:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: ${{ github.event.inputs.max_parallel }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium beautifulsoup4 lxml
+
+      - name: Setup Chrome (for Selenium)
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Run batch
+        env:
+          FIRST_PAGE: ${{ matrix.start }}
+          LAST_PAGE: ${{ matrix.end }}
+          OUTFILE: schemes_list_${{ matrix.start }}-${{ matrix.end }}.csv
+        run: |
+          python scrape.py --join-lists
+
+      - name: Upload batch artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-${{ matrix.start }}-${{ matrix.end }}
+          path: schemes_list_${{ matrix.start }}-${{ matrix.end }}.csv
+
+  # Optional: merge all CSVs after scraping
+  finalize:
+    needs: scrape
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge CSVs (keep only first header)
+        shell: bash
+        run: |
+          out="schemes_list_merged.csv"
+          first=1
+          for f in artifacts/**.csv; do
+            if [ $first -eq 1 ]; then
+              cat "$f" > "$out"
+              first=0
+            else
+              # Skip header for subsequent files
+              tail -n +2 "$f" >> "$out"
+            fi
+          done
+          ls -lh "$out"
+      - name: Upload merged CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemes_list_merged
+          path: schemes_list_merged.csv
