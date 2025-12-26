@@ -1,28 +1,47 @@
+
 name: Government Scheme List
+
 on:
   push:
   workflow_dispatch:
+
 jobs:
   scheme:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 355   # keep under GitHub's 6-hr ceiling safely
+
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      # Optional: reduce Selenium/chromedriver noise
+      WDM_LOG_LEVEL: "0"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # - name: Set up Python
-      #   uses: actions/setup-python@v4
-      #   with:
-      #     python-version: '3.13.9'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Optional: quick sanity check that Chrome exists (ubuntu-latest usually has it)
+      - name: Check Chrome
+        run: |
+          google-chrome --version || true
+          chromium-browser --version || true
+
       - name: Run scheme script
-        run: python scrape_govt_schemes.py 
-      
-      - name: upload scheme file
+        run: |
+          python new1.py
+
+      - name: Upload scheme file
         uses: actions/upload-artifact@v4
         with:
           name: schemes_list
