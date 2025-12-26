@@ -2,7 +2,6 @@
 name: Scrape MyScheme in 10-page batches
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       total_pages:
@@ -31,26 +30,35 @@ jobs:
           TOTAL=${{ github.event.inputs.total_pages }}
           BATCH=${{ github.event.inputs.batch_size }}
 
-          # Build JSON array of objects: [{"start":1,"end":10},{"start":11,"end":20}, ...]
-          ranges=()
-          start=1
-          while [ $start -le $TOTAL ]; do
-            end=$(( start + BATCH - 1 ))
-            if [ $end -gt $TOTAL ]; then end=$TOTAL; fi
-            ranges+=( "{\"start\":$start,\"end\":$end}" )
-            start=$(( end + 1 ))
-          done
+          # Build JSON array with commas between objects
+          MATRIX='['
+          START=1
+          FIRST=1
+          while [ $START -le $TOTAL ]; do
+            END=$(( START + BATCH - 1 ))
+            [ $END -gt $TOTAL ] && END=$TOTAL
 
-          json="[${ranges[*]}]"
-          echo "matrix=$json" >> "$GITHUB_OUTPUT"
-          echo "Generated matrix: $json"
+            if [ $FIRST -eq 1 ]; then
+              FIRST=0
+            else
+              MATRIX+=','
+            fi
+            MATRIX+="{\"start\":$START,\"end\":$END}"
+
+            START=$(( END + 1 ))
+          done
+          MATRIX+=']'
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix: $MATRIX"
 
   scrape:
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
       max-parallel: ${{ github.event.inputs.max_parallel }}
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,7 +112,6 @@ jobs:
               cat "$f" > "$out"
               first=0
             else
-              # Skip header for subsequent files
               tail -n +2 "$f" >> "$out"
             fi
           done
