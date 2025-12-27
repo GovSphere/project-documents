@@ -16,14 +16,14 @@ from selenium.common.exceptions import (
 
 URL = "https://www.myscheme.gov.in"
 START_URL = URL + "/search"
-STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh","Arunachal Pradesh",
-         "Assam", "Bihar", "Chandigarh","Chhattisgarh", "Dadra & Nagar Haveli and Daman & Diu",
-        "Delhi", "Goa", "Gujarat", "Himachal Pradesh",
-        "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala",
-        "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra",
-        "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
-        "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
-        "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"]
+# STATES = ["Andaman and Nicobar Islands", "Andhra Pradesh","Arunachal Pradesh",
+#          "Assam", "Bihar", "Chandigarh","Chhattisgarh", "Dadra & Nagar Haveli and Daman & Diu",
+#         "Delhi", "Goa", "Gujarat", "Himachal Pradesh",
+#         "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala",
+#         "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra",
+#         "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
+#         "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+#         "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"]
 FIRST_PAGE = 1
 LAST_PAGE = 453  # as per your paginator
 
@@ -133,6 +133,9 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
 
     main_window = driver.current_window_handle
 
+    el = driver.find_element(By.XPATH, "//span[normalize-space()='Central Schemes']")
+    driver.execute_script("arguments[0].scrollIntoView({block:'center',inline:'center'}); arguments[0].click();", el)
+
     # Iterate pages
     for page in range(FIRST_PAGE, LAST_PAGE + 1):
         if page > 1:
@@ -158,19 +161,19 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
         cards = []
         for a in soup.select("h2[id] > a[href^='/schemes/']"):
             title_h2 = a.find_parent("h2")
-            ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
-            ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
-            next_div = title_h2.find_parent("div")
-            if ministry in STATES:
-                continue  # skip state schemes
             h2_id = title_h2.get("id", "")
             href = a.get("href", "")
             scheme_url = URL + href
             scheme_name = (a.find("span") or a).get_text(strip=True)
 
             # Ministry/Department text near the card
-            next_div = title_h2.find_parent("div")
+            ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
+            ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
+            next_div = title_h2.find_parent("div")  # outer flex-col div
             tags = [span.get_text(strip=True) for span in next_div.find_next("div").find_all("span")]
+            # if ministry in STATES:
+            #     print("Skipping state scheme:", scheme_name)
+            # else:
             print(ministry," | ", scheme_url, " | ", scheme_name, " | ", tags)
             cards.append((ministry, scheme_name, scheme_url, tags))
 
