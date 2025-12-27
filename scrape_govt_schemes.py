@@ -158,18 +158,19 @@ with open("schemes_list.csv", "w", newline="", encoding="utf-8") as csvfile:
         cards = []
         for a in soup.select("h2[id] > a[href^='/schemes/']"):
             title_h2 = a.find_parent("h2")
+            ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
+            ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
+            next_div = title_h2.find_parent("div")
+            if ministry in STATES:
+                continue  # skip state schemes
             h2_id = title_h2.get("id", "")
             href = a.get("href", "")
             scheme_url = URL + href
             scheme_name = (a.find("span") or a).get_text(strip=True)
 
             # Ministry/Department text near the card
-            ministry_h2 = title_h2.find_next("h2", attrs={"role": "button"})
-            ministry = ministry_h2.get_text(strip=True) if ministry_h2 else ""
-            next_div = title_h2.find_parent("div")  # outer flex-col div
+            next_div = title_h2.find_parent("div")
             tags = [span.get_text(strip=True) for span in next_div.find_next("div").find_all("span")]
-            if ministry in STATES:
-                continue
             print(ministry," | ", scheme_url, " | ", scheme_name, " | ", tags)
             cards.append((ministry, scheme_name, scheme_url, tags))
 
