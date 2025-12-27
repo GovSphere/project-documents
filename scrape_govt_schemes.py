@@ -25,7 +25,7 @@ START_URL = URL + "/search"
 #         "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
 #         "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"]
 FIRST_PAGE = 1
-LAST_PAGE = 453  # as per your paginator
+LAST_PAGE = 60  # as per your paginator
 
 # ----------------------------
 # Selenium setup
